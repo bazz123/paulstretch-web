@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PaulStretch Web</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>PaulStretch <span>Web</span></h1>
+      <p>Extreme time stretching in the browser</p>
+    </div>
+    <div class="transport">
+      <label class="btn" title="Open an audio file (or drop one anywhere)">
+        <input id="file" type="file" accept="audio/*" hidden>Open audio…
+      </label>
+      <button id="demo" class="btn ghost">Demo sound</button>
+      <div class="preset-bar">
+        <select id="preset" aria-label="Preset"></select>
+        <button id="savePreset" class="btn ghost icon-btn" title="Save current settings as a preset" aria-label="Save preset">Save…</button>
+        <button id="deletePreset" class="btn ghost icon-btn" title="Delete this preset" aria-label="Delete preset" hidden>Delete</button>
+      </div>
+      <button id="play" class="btn primary" disabled><span id="playIcon">▶</span> <span id="playLabel">Play</span></button>
+      <button id="helpBtn" class="btn help-btn" title="Help (?)" aria-label="Help">?</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel wave-panel">
+      <div class="wave-head">
+        <span id="fileInfo" class="muted">No audio loaded. Open a file, drop one here, or try the demo sound.</span>
+        <span id="rangeInfo" class="mono muted"></span>
+      </div>
+      <div class="wave-wrap">
+        <canvas id="wave"></canvas>
+        <div id="dropHint" class="drop-hint">Drop audio file</div>
+      </div>
+      <p class="hint">Drag to select a play range · click to jump · double-click to reset the range</p>
+      <canvas id="spectrum"></canvas>
+    </section>
+
+    <section class="panel">
+      <h2>Stretch</h2>
+      <div id="mainControls" class="controls"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Spectral processing</h2>
+        <span class="muted small">Modules run top to bottom; use the arrows to reorder</span>
+      </div>
+      <div id="modules" class="modules"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Render to WAV</h2>
+      <div class="render">
+        <label>Length <input id="renderSecs" type="number" min="1" max="600" step="1" value="60"> s</label>
+        <label class="check"><input id="normalize" type="checkbox" checked> Normalise to −1 dBFS</label>
+        <button id="render" class="btn" disabled>Render</button>
+        <button id="cancelRender" class="btn ghost" hidden>Cancel</button>
+        <progress id="renderProgress" max="1" value="0" hidden></progress>
+      </div>
+      <div id="renderOut" class="render-out"></div>
+    </section>
+  </main>
+
+  <footer>
+    Algorithm by Nasca Octavian Paul (PaulStretch); spectral modules after PaulXStretch by Xenakios &amp; Jesse Chappell. GPLv3.
+  </footer>
+
+  <dialog id="help" class="help" aria-labelledby="helpTitle">
+    <div class="help-head">
+      <h2 id="helpTitle">Help</h2>
+      <button class="btn ghost help-close" data-close aria-label="Close">✕</button>
+    </div>
+    <nav id="helpNav" class="help-nav"></nav>
+    <div id="helpBody" class="help-body"></div>
+  </dialog>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
