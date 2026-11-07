@@ -31,7 +31,10 @@
     <section class="panel wave-panel">
       <div class="wave-head">
         <span id="fileInfo" class="muted">No audio loaded. Open a file, drop one here, or try the demo sound.</span>
-        <span id="rangeInfo" class="mono muted"></span>
+        <span class="wave-head-right">
+          <span id="rangeInfo" class="mono muted"></span>
+          <button id="captureBtn" class="btn small-btn capture-btn" disabled title="Capture the sound at the playhead (white line)">◉ Capture moment</button>
+        </span>
       </div>
       <div class="wave-wrap">
         <canvas id="wave"></canvas>
@@ -52,6 +55,35 @@
         <span class="muted small">Spectral modules 1–8, then the EQ curve (9), then effects (FX): Binaural first, then the order shown</span>
       </div>
       <div id="modules" class="modules"></div>
+    </section>
+
+    <section class="panel" id="capturePanel">
+      <div class="panel-head">
+        <h2>Capture a sound</h2>
+        <span class="muted small">Freeze one moment and export it as a one-shot, a seamless loop or a long drone for your DAW</span>
+      </div>
+      <div class="capture">
+        <div class="capture-left">
+          <canvas id="captureSpectrum" aria-label="Captured spectrum"></canvas>
+          <p id="captureInfo" class="muted small">Click a spot in the waveform (or play to it), then press <strong>◉ Capture moment</strong>.</p>
+        </div>
+        <div class="capture-right">
+          <div class="seg" role="radiogroup" aria-label="Capture type">
+            <label><input type="radio" name="capType" value="oneshot"> One-shot</label>
+            <label><input type="radio" name="capType" value="loop" checked> Loop</label>
+            <label><input type="radio" name="capType" value="drone"> Long drone</label>
+          </div>
+          <div id="capOptions" class="cap-options"></div>
+          <div class="capture-actions">
+            <button id="capListen" class="btn" disabled>▶ Listen</button>
+            <button id="capExport" class="btn primary-2" disabled>Export WAV</button>
+            <button id="capCancel" class="btn ghost" hidden>Cancel</button>
+            <progress id="capProgress" max="1" value="0" hidden></progress>
+          </div>
+          <p id="capStatus" class="muted small mono" hidden></p>
+          <div id="capOut" class="render-out"></div>
+        </div>
+      </div>
     </section>
 
     <section class="panel">

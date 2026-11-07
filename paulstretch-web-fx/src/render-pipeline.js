@@ -11,10 +11,11 @@ const TAIL_QUIET_SECONDS = 0.5;
 // Calls onBlock(L, R, n) with consecutive stereo blocks. Returns stats.
 // gain is the master volume, applied after the effects. The last few seconds of
 // the stretched audio fade out before the effects, so tails end naturally.
-export async function renderPipeline({ channels, sampleRate, params, seconds, gain = 1, onBlock, onProgress, yieldFn }) {
+// source: optional replacement for the stretch engine (e.g. a FrozenSource).
+export async function renderPipeline({ channels, sampleRate, params, seconds, gain = 1, onBlock, onProgress, yieldFn, source }) {
   const sr = sampleRate;
   const total = Math.max(1, Math.round(seconds * sr));
-  const eng = new Engine(channels, sr, { ...params });
+  const eng = source || new Engine(channels, sr, { ...params });
   const fx = new FxChain(sr, 8192);
   fx.setParams(params.fx);
   // effects start in their final state, exactly as configured
@@ -56,12 +57,18 @@ export async function renderPipeline({ channels, sampleRate, params, seconds, ga
       L[i] = out[0][i] * g;
       R[i] = o1[i] * g;
     }
-    fx.process(L, R, n, true);
+    // effects in sub-blocks so the binaural tones follow the end fade
+    for (let o = 0; o < n; o += 1024) {
+      const k = Math.min(1024, n - o), pos = written + o;
+      fx.setToneGate(fadeLen > 0 && pos >= total - fadeLen ? (total - pos) / fadeLen : 1);
+      fx.process(L.subarray(o, o + k), R.subarray(o, o + k), k, true);
+    }
     emit(n);
     written += n;
     await maybeYield();
   }
   const body = written;
+  fx.setToneGate(0);
 
   // tail: let reverb/chorus ring out on silence
   let tail = 0;

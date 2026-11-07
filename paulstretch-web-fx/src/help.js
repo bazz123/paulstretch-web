@@ -393,6 +393,20 @@ const SECTIONS = [
       <p><strong>Limits:</strong> the shimmer path is soft-limited and the decay is shortened slightly while it is on, so it cannot run away; very high amounts with long decays can still get bright, so pair them with more damping.</p>`,
   },
   {
+    id: 'capture', title: 'Capture a sound',
+    shot: () => shot(cloneEl(document.querySelector('#capturePanel .capture'))),
+    html: `<p>Freezes one moment of your source and exports it as a sound for your DAW or sampler, with all current spectral modules and effects.</p>
+      <ol class="help-ol"><li>Click in the waveform where the sound should come from (or let it play there). Turning on <strong>Freeze</strong> lets you hear the moment first.</li>
+      <li>Press <strong>◉ Capture moment</strong> above the waveform. An amber line marks the spot; the panel shows its spectrum and the <strong>detected pitch</strong>.</li>
+      <li>Choose <strong>One-shot</strong>, <strong>Loop</strong> or <strong>Long drone</strong>, press <strong>▶ Listen</strong> to audition, then <strong>Export WAV</strong>.</li></ol>
+      <ul><li><strong>One-shot</strong>: a note with a length (1–60 s), attack and release; reverb and chorus tails ring out after it.</li>
+      <li><strong>Loop</strong>: repeats without a seam. Set the length in seconds or as bars at a BPM for tempo-synced loops (max 60 s). The effects are pre-rolled so the reverb tail wraps around; chorus, reverb movement and binaural beats are nudged by a tiny amount so they complete whole cycles in the loop. A binaural glide is held at its start value.</li>
+      <li><strong>Long drone</strong>: up to 3 hours from the captured moment. It keeps evolving gently and never repeats; streamed to disk like a normal export.</li></ul>
+      <p><strong>In your DAW:</strong> files are 24-bit by default (16-bit optional). The detected root note and fine tuning, and for loops the loop points, are written into the file's sampler data, so Ableton Simpler/Sampler, Kontakt, Logic Sampler and similar map and loop it automatically. The note is also in the filename, for example <em>Pad - A2 +12c - loop 8s.wav</em>. Sounds without a clear pitch get root note C4.</p>
+      <p><strong>Tips:</strong> a larger window gives purer, more tonal captures; a small window gives grittier ones. <strong>Harmonics</strong> turns a noisy moment into a clean pitched tone, and the <strong>Spectral EQ curve</strong> shapes it. Changing settings after capturing is fine: Listen and Export always use the current settings.</p>
+      <p><strong>Limits:</strong> pitch detection works best on tonal sounds and larger windows; very short windows (under about 170 ms) make low notes less accurate. Loops shorter than about 2 s can sound repetitive.</p>`,
+  },
+  {
     id: 'render', title: 'Export behaviour',
     shot: () => shot(cloneEl(document.querySelector('.render'))),
     html: `<p><strong>Render</strong> creates a 16-bit stereo WAV with exactly the same processing as playback: the same engine, spectral modules, EQ curve, effects and volume. It runs in the background and streams to disk as it goes, so even a 3-hour export (about 2 GB) needs little memory.</p>

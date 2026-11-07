@@ -12,6 +12,10 @@ version, plus:
 - **Spectral EQ curve**: a drawable gain curve as spectral module 9.
 - **Streamed WAV export up to 3 hours**, with effect tails and two-pass
   normalise.
+- **Capture a sound**: freeze one moment and export it as a one-shot, a
+  seamless loop (length in seconds or bars at a BPM) or a long drone, with all
+  effects. 24-bit WAV with the detected root note and loop points written into
+  the file for samplers.
 
 ## Run
 
@@ -41,7 +45,9 @@ EQ / Chorus / Reverb (reorderable among themselves) → Volume → output or fil
 | `src/engine-worker.js` | Runs the engine ahead of playback and streams frames to the player |
 | `src/player-worklet.js` | AudioWorklet: plays frames and runs `FxChain` live, so effect changes are immediate |
 | `src/render-pipeline.js` | Export pipeline: engine → `FxChain` → volume, block by block, end fade and tails |
-| `src/render-worker.js` | Export worker: streams 16-bit WAV to the browser's private file storage (OPFS) |
+| `src/render-worker.js` | Export worker: normal exports and captures; streams WAV to the browser's private file storage (OPFS) |
+| `src/capture.js` | Frozen source, seamless-loop synthesis, one-shot rendering, pitch detection |
+| `src/wav-writer.js` | 16/24-bit WAV with `smpl` chunk (root note, fine tuning, loop points) |
 | `src/presets.js` | Versioned presets (v2 adds effects and the EQ curve; v1 presets still load) |
 | `src/app.js`, `src/help.js` | Interface and help page |
 

@@ -131,6 +131,7 @@ class Binaural {
     this.shiftMix = new Smooth(1, 30, sr);   // original method on/off within the effect
     this.toneLevel = new Smooth(0, 30, sr);
     this.carrier = new Smooth(200, 50, sr);
+    this.gate = new Smooth(1, 40, sr);        // tones follow the music: 0 after Stop / at the end of a file
     this.p = defaultFx().binaural;
   }
   set(p) {
@@ -168,7 +169,7 @@ class Binaural {
       else { bl = outl2; br = outr2; }
       let ol = inl + (bl - inl) * shift, or = inr + (br - inr) * shift;
       // tone generator: two carriers a beat apart
-      const lvl = this.toneLevel.next();
+      const lvl = this.toneLevel.next() * this.gate.next();
       const car = this.carrier.next();
       this.phL += (car - beat * 0.5) / sr; this.phL -= Math.floor(this.phL);
       this.phR += (car + beat * 0.5) / sr; this.phR -= Math.floor(this.phR);
@@ -302,7 +303,9 @@ class Chorus {
       let wl = 0, wr = 0, gsum = 0;
       for (let k = 0; k < 4; k++) {
         const g = this.vg[k].next();
-        this.phase[k] += (rate * CH_RATE_MUL[k]) / sr;
+        let vr = rate * CH_RATE_MUL[k];
+        if (this.period) vr = Math.max(1, Math.round(vr * this.period)) / this.period;
+        this.phase[k] += vr / sr;
         if (this.phase[k] >= 1) this.phase[k] -= 1;
         if (g < 1e-5) continue;
         const amp = depth * 6 * msS;
@@ -332,9 +335,13 @@ const WET_GAIN = 0.9;
 
 class PitchUp { // two-head granular octave-up shifter
   constructor(sr) {
-    this.W = Math.round(0.06 * sr);
-    this.dl = new DelayLine(this.W + 8);
+    this.W0 = this.W = Math.round(0.06 * sr);
+    this.dl = new DelayLine(2 * this.W0 + 8);
     this.p = 0;
+  }
+  // loop mode: the grain cycle divides the loop length exactly
+  setPeriodSamples(n) {
+    this.W = n > 0 ? n / Math.max(1, Math.round(n / this.W0)) : this.W0;
   }
   process(x) {
     this.dl.write(x);
@@ -360,10 +367,9 @@ class FdnChannel {
     this.out = new Float64Array(8);
     // slow delay modulation per line, as rotating (cos, sin) pairs: no sin() per sample
     const ph = FDN_MS.map((_, i) => 2 * Math.PI * ((i * 0.137 + seed * 0.31) % 1));
-    const rate = FDN_MS.map((_, i) => 0.07 + 0.045 * ((i * 3 + seed) % 7));
+    this.rate = FDN_MS.map((_, i) => 0.07 + 0.045 * ((i * 3 + seed) % 7));
     this.mc = Float64Array.from(ph, Math.cos); this.ms = Float64Array.from(ph, Math.sin);
-    this.rc = Float64Array.from(rate, (r) => Math.cos((2 * Math.PI * r) / sr));
-    this.rs = Float64Array.from(rate, (r) => Math.sin((2 * Math.PI * r) / sr));
+    this.setModPeriod(0);
     this.modDepth = 0.0004 * sr;
     this.ticks = 0;
     this.diff = DIFF_MS.map((ms) => ({ dl: new DelayLine(Math.ceil(ms * skew * msS) + 4), d: Math.round(ms * skew * msS) }));
@@ -373,6 +379,13 @@ class FdnChannel {
     this.h = new Float64Array(8);
     this.g = new Float64Array(8);
     this.gKey = -1; this.gKey2 = -1;
+  }
+  // period > 0: every modulation completes whole cycles in `period` seconds (seamless loops)
+  setModPeriod(period) {
+    const sr = this.sr;
+    const rate = this.rate.map((r) => (period ? Math.max(1, Math.round(r * period)) / period : r));
+    this.rc = Float64Array.from(rate, (r) => Math.cos((2 * Math.PI * r) / sr));
+    this.rs = Float64Array.from(rate, (r) => Math.sin((2 * Math.PI * r) / sr));
   }
   clear() {
     this.ticks = 0;
@@ -495,15 +508,44 @@ export class FxChain {
     this.timeline = 0;      // samples of playback/export time, for binaural glide
   }
 
+  // Loop mode: all moving parts complete whole cycles in `seconds`, so a loop
+  // rendered through the chain repeats without a seam. The binaural glide is
+  // replaced by its starting beat (a glide cannot loop).
+  setLoopPeriod(seconds) {
+    this.loopT = seconds > 0 ? seconds : 0;
+    this.units.chorus.period = this.loopT;
+    for (const ch of this.units.reverb.ch) {
+      ch.setModPeriod(this.loopT);
+      ch.shim.setPeriodSamples(Math.round(this.loopT * this.sr));
+    }
+    if (this.fx) this.setParams(this.fx);
+  }
+
   setParams(fx) {
     this.fx = normalizeFx(fx);
+    if (this.loopT) {
+      const T = this.loopT;
+      const b = { ...this.fx.binaural };
+      const beat = b.glide.enabled ? beatAt(b, 0) : b.beat;
+      b.glide = { ...b.glide, enabled: false };
+      const kd = 2 * Math.max(1, Math.round((beat * T) / 2));
+      const kc = Math.max(kd, Math.round(b.carrier * T));
+      b.beat = kd / T;
+      b.carrier = kc / T;
+      this.fx = { ...this.fx, binaural: b };
+    }
     for (const k of FX_NAMES) {
       this.en[k].set(this.fx.enabled[k] ? 1 : 0);
       this.units[k].set(this.fx[k]);
     }
   }
 
+  get loopPeriod() { return this.loopT || 0; }
+
   resetTimeline() { this.timeline = 0; }
+
+  // Tone generator gate (0..1): the generated tones fade with the music.
+  setToneGate(v) { this.units.binaural.gate.set(v); }
 
   reset() {
     for (const k of FX_NAMES) this.units[k].clear();

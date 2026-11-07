@@ -1,6 +1,7 @@
 import { defaultParams, WINDOW_TYPES, MODULES, drawEqCurve, DRAW_EQ_MIN_DB, DRAW_EQ_MAX_DB } from './dsp.js';
 import { defaultFx, normalizeFx, FX_REORDERABLE, eqResponseDb, EQ_LOW_FREQ, EQ_HIGH_FREQ } from './effects.js';
 import { openHelp } from './help.js';
+import { captureSnapshot } from './capture.js';
 import { PRESETS, PRESET_VERSION, applySettings, snapshot, loadUserPresets, saveUserPresets } from './presets.js';
 
 const $ = (id) => document.getElementById(id);
@@ -86,6 +87,13 @@ function setAudio(abuf, name) {
   $('fileInfo').classList.remove('muted');
   $('play').disabled = false;
   $('render').disabled = false;
+  $('captureBtn').disabled = false;
+  cap.pos = null; cap.mono = null; cap.pitch = null; cap.cache = null;
+  $('capListen').disabled = $('capExport').disabled = true;
+  $('captureInfo').textContent = 'Click a spot in the waveform (or play to it), then press ◉ Capture moment.';
+  $('captureInfo').classList.add('muted');
+  $('capOut').innerHTML = '';
+  drawCaptureSpectrum();
   refreshDerived();
   drawWave();
 }
@@ -875,6 +883,12 @@ function drawWave() {
   }
   g.fillStyle = '#8f9cff';
   for (const x of [s, e]) { g.fillRect(x - dpr, 0, 2 * dpr, H); g.fillRect(x - 5 * dpr, 0, 10 * dpr, 4 * dpr); }
+  if (cap.pos !== null) {
+    const cx = cap.pos * W;
+    g.fillStyle = '#f2c46b';
+    g.fillRect(cx - dpr, 0, 2 * dpr, H);
+    g.beginPath(); g.arc(cx, H - 7 * dpr, 5 * dpr, 0, 2 * Math.PI); g.fill();
+  }
   const px = playPos * W;
   g.fillStyle = '#ffffff';
   g.fillRect(px - dpr / 2, 0, dpr, H);
@@ -1091,6 +1105,330 @@ async function removeExportFiles(only) {
 // Export files from an earlier visit can't be downloaded any more: free the space.
 removeExportFiles();
 
+// ------------------------------------------------------------------ capture a sound
+
+const cap = {
+  pos: null, pitch: null, mono: null,
+  type: 'loop',
+  oneshot: { seconds: 8, attack: 0.5, release: 3 },
+  loop: { mode: 'seconds', seconds: 8, bpm: 120, bars: 4, beatsPerBar: 4 },
+  drone: { seconds: 600 },
+  includeFx: true, normalize: true, bits: 24,
+  worker: null, jobId: 0, cache: null, source: null, url: null, start: 0,
+};
+
+const capChannels = () => {
+  const b = audio.buffer;
+  return Array.from({ length: Math.min(2, b.numberOfChannels) }, (_, c) => b.getChannelData(c));
+};
+
+function loopSeconds() {
+  const l = cap.loop;
+  return l.mode === 'bars' ? (l.bars * l.beatsPerBar * 60) / l.bpm : l.seconds;
+}
+
+function capSeconds() {
+  if (cap.type === 'loop') return loopSeconds();
+  if (cap.type === 'oneshot') return cap.oneshot.seconds;
+  return cap.drone.seconds;
+}
+
+function captureMoment() {
+  if (!audio) return;
+  cap.pos = playPos;
+  refreshSnapshot();
+  $('capListen').disabled = $('capExport').disabled = false;
+  drawWave();
+  $('capturePanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function refreshSnapshot() {
+  if (!audio || cap.pos === null) return;
+  const snap = captureSnapshot(capChannels(), audio.sampleRate, engineParams(), cap.pos);
+  cap.mono = snap.mono;
+  cap.pitch = snap.pitch;
+  const at = fmtTime(cap.pos * audio.duration);
+  const info = $('captureInfo');
+  info.classList.remove('muted');
+  info.innerHTML = '';
+  info.append(`Captured at ${at} · `);
+  const p = document.createElement('span');
+  p.className = 'pitch';
+  p.textContent = cap.pitch ? `${cap.pitch.label} (${cap.pitch.hz.toFixed(1)} Hz)` : 'no single clear pitch';
+  info.append(p, cap.pitch ? ' · root note written into the file' : ' (chord or noise) · root note C4 in the file');
+  const note = document.createElement('div');
+  note.className = 'muted';
+  note.textContent = 'Listen and Export use your current settings, including all effects.';
+  info.append(note);
+  drawCaptureSpectrum();
+}
+
+function drawCaptureSpectrum() {
+  const c = $('captureSpectrum');
+  const dpr = sizeCanvas(c);
+  const g = c.getContext('2d');
+  const W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  if (!cap.mono) return;
+  const sr = audio.sampleRate, n = cap.mono.length;
+  const fx = (f) => (Math.log10(f / 20) / 3) * W;
+  let max = 1e-12;
+  for (let i = 1; i < n; i++) max = Math.max(max, cap.mono[i]);
+  g.beginPath();
+  g.moveTo(0, H);
+  for (let x = 0; x < W; x++) {
+    const f = 20 * Math.pow(1000, x / W);
+    const k0 = Math.floor((f / (sr / 2)) * n), k1 = Math.max(k0 + 1, Math.floor(((20 * Math.pow(1000, (x + 1) / W)) / (sr / 2)) * n));
+    let v = 0;
+    for (let k = k0; k < Math.min(n, k1); k++) v = Math.max(v, cap.mono[k]);
+    const db = Math.max(-80, 20 * Math.log10(v / max + 1e-9));
+    g.lineTo(x, H - ((db + 80) / 80) * (H - 6 * dpr));
+  }
+  g.lineTo(W, H);
+  g.closePath();
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(242, 196, 107, 0.7)');
+  grad.addColorStop(1, 'rgba(242, 196, 107, 0.05)');
+  g.fillStyle = grad;
+  g.fill();
+  g.font = `${10 * dpr}px ui-sans-serif, system-ui, sans-serif`;
+  g.fillStyle = '#5d6a82';
+  for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) g.fillText(f >= 1000 ? `${f / 1000}k` : String(f), fx(f) + 2 * dpr, H - 4 * dpr);
+  if (cap.pitch) {
+    const x = fx(cap.pitch.hz);
+    g.fillStyle = '#f2c46b';
+    g.fillRect(x - dpr / 2, 0, dpr, H);
+    g.fillText(cap.pitch.note, x + 3 * dpr, 12 * dpr);
+  }
+}
+
+function buildCaptureOptions() {
+  const box = $('capOptions');
+  box.innerHTML = '';
+  const none = () => {};
+  const t = cap.type;
+  if (t === 'oneshot') {
+    box.append(
+      slider({ label: 'Length', min: 1, max: 60, step: 0.5, get: () => cap.oneshot.seconds, set: (v) => { cap.oneshot.seconds = v; }, fmt: (v) => `${v.toFixed(1)} s`, onChange: none }),
+      slider({ label: 'Attack', min: 0, max: 10, step: 0.05, get: () => cap.oneshot.attack, set: (v) => { cap.oneshot.attack = v; }, fmt: (v) => `${v.toFixed(2)} s`, onChange: none }),
+      slider({ label: 'Release', min: 0, max: 20, step: 0.1, get: () => cap.oneshot.release, set: (v) => { cap.oneshot.release = v; }, fmt: (v) => `${v.toFixed(1)} s`, onChange: none }),
+    );
+  } else if (t === 'loop') {
+    const l = cap.loop;
+    const mode = document.createElement('div');
+    mode.className = 'inline full';
+    mode.innerHTML = `<label class="check"><input type="radio" name="loopMode" value="seconds"> Seconds</label>
+      <label class="check"><input type="radio" name="loopMode" value="bars"> Bars at a tempo</label>`;
+    mode.querySelector(`input[value=${l.mode}]`).checked = true;
+    mode.addEventListener('change', (e) => { l.mode = e.target.value; buildCaptureOptions(); });
+    box.append(mode);
+    if (l.mode === 'seconds') {
+      box.append(slider({ label: 'Loop length', min: 1, max: 60, step: 0.5, get: () => l.seconds, set: (v) => { l.seconds = v; }, fmt: (v) => `${v.toFixed(1)} s`, onChange: none }));
+    } else {
+      const row = document.createElement('div');
+      row.className = 'inline full';
+      row.innerHTML = `<label>BPM <input type="number" min="30" max="300" step="0.1" value="${l.bpm}" data-k="bpm"></label>
+        <label>Bars <input type="number" min="1" max="64" step="1" value="${l.bars}" data-k="bars"></label>
+        <label>Beats per bar <input type="number" min="1" max="16" step="1" value="${l.beatsPerBar}" data-k="beatsPerBar"></label>
+        <span class="mono muted" id="loopLen"></span>`;
+      const upd = () => {
+        const s = loopSeconds();
+        row.querySelector('#loopLen').textContent = `= ${s.toFixed(3)} s${s > 60 ? ' (max 60 s)' : ''}`;
+      };
+      row.addEventListener('input', (e) => {
+        const k = e.target.dataset.k;
+        if (!k) return;
+        const v = +e.target.value;
+        if (v > 0) l[k] = v;
+        upd();
+      });
+      box.append(row);
+      requestAnimationFrame(upd);
+    }
+  } else {
+    const d = cap.drone;
+    const row = document.createElement('div');
+    row.className = 'inline full';
+    const h = Math.floor(d.seconds / 3600), m = Math.floor((d.seconds % 3600) / 60), s = Math.round(d.seconds % 60);
+    row.innerHTML = `Length <input type="number" min="0" max="3" value="${h}" data-u="3600" aria-label="Hours"> h
+      <input type="number" min="0" max="59" value="${m}" data-u="60" aria-label="Minutes"> m
+      <input type="number" min="0" max="59" value="${s}" data-u="1" aria-label="Seconds"> s
+      <span class="muted">up to 3 h, streamed to disk</span>`;
+    row.addEventListener('input', () => {
+      let total = 0;
+      row.querySelectorAll('input').forEach((i) => { total += (+i.value || 0) * +i.dataset.u; });
+      d.seconds = Math.max(1, Math.min(MAX_EXPORT_SECONDS, total));
+    });
+    box.append(row);
+  }
+  const common = document.createElement('div');
+  common.className = 'inline full';
+  const fxc = check({ label: 'Include effects', get: () => cap.includeFx, set: (v) => { cap.includeFx = v; }, onChange: none });
+  const norm = check({ label: 'Normalise to −1 dBFS', get: () => cap.normalize, set: (v) => { cap.normalize = v; }, onChange: none });
+  const bits = document.createElement('label');
+  bits.innerHTML = `<select aria-label="Bit depth"><option value="24">24-bit</option><option value="16">16-bit</option></select>`;
+  const sel = bits.querySelector('select');
+  sel.className = 'ctl-select';
+  sel.value = String(cap.bits);
+  sel.addEventListener('change', () => { cap.bits = +sel.value; });
+  common.append(fxc, norm, bits);
+  box.append(common);
+  if (t === 'loop') {
+    const hint = document.createElement('p');
+    hint.className = 'muted small full';
+    hint.textContent = 'The loop point is written into the file, so samplers loop it automatically. Effects are pre-rolled so the reverb tail wraps around seamlessly; a binaural glide is held at its start value.';
+    box.append(hint);
+  } else if (t === 'drone') {
+    const hint = document.createElement('p');
+    hint.className = 'muted small full';
+    hint.textContent = 'The frozen moment keeps evolving gently (new random phases), so it never repeats. Listen plays a 20-second preview.';
+    box.append(hint);
+  }
+}
+
+function capJobKey(kind, opts) {
+  return JSON.stringify({ kind, opts, pos: cap.pos, p: engineParams(), file: audio.name, len: audio.duration });
+}
+
+function capOpts(kind) {
+  const seconds = Math.min(kind === 'drone' ? MAX_EXPORT_SECONDS : 60, kind === 'preview' ? 20 : capSeconds());
+  return { seconds, attack: cap.oneshot.attack, release: cap.oneshot.release, includeFx: cap.includeFx, normalize: cap.normalize, bits: cap.bits };
+}
+
+function setCapBusy(on, label = '') {
+  $('capProgress').hidden = !on;
+  $('capStatus').hidden = !on;
+  $('capCancel').hidden = !on;
+  $('capListen').disabled = $('capExport').disabled = on;
+  if (on) { $('capProgress').value = 0; $('capStatus').textContent = label; }
+}
+
+// Runs a capture job in a fresh worker. kind: 'oneshot' | 'loop' | 'drone'.
+function runCapture(kind, opts) {
+  return new Promise((resolve, reject) => {
+    cap.jobId++;
+    const id = 1000 + cap.jobId;
+    if (cap.worker) cap.worker.terminate();
+    const w = new Worker(new URL('./render-worker.js', import.meta.url), { type: 'module' });
+    cap.worker = w;
+    cap.start = performance.now();
+    const chans = capChannels().map((c) => Float32Array.from(c));
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.id !== id) return;
+      if (m.type === 'progress') {
+        $('capProgress').value = m.progress;
+        const el = (performance.now() - cap.start) / 1000;
+        const eta = m.progress > 0.02 ? el * (1 / m.progress - 1) : NaN;
+        if (kind === 'drone') $('capStatus').textContent = `Rendering drone · ${Math.round(m.progress * 100)}% · ${isFinite(eta) ? `about ${fmtTime(eta)} left` : 'estimating…'}`;
+      } else if (m.type === 'capture-done') {
+        w.terminate(); cap.worker = null;
+        resolve(m);
+      } else if (m.type === 'error') {
+        w.terminate(); cap.worker = null;
+        reject(new Error(m.message));
+      }
+    };
+    w.onerror = (e) => { w.terminate(); cap.worker = null; reject(new Error(e.message || 'The capture worker failed.')); };
+    w.postMessage({ type: 'capture', id, kind, channels: chans, sampleRate: audio.sampleRate, params: engineParams(), pos: cap.pos, opts }, chans.map((c) => c.buffer));
+  });
+}
+
+function stopListening() {
+  if (cap.source) { try { cap.source.stop(); } catch { /* already stopped */ } cap.source = null; }
+  $('capListen').textContent = '▶ Listen';
+}
+
+async function capListen() {
+  if (cap.source) { stopListening(); return; }
+  if (cap.pos === null) return;
+  await ensureAudio();
+  if (playing) stop();
+  refreshSnapshot();
+  const kind = cap.type === 'drone' ? 'oneshot' : cap.type;
+  const opts = cap.type === 'drone' ? { ...capOpts('preview'), attack: 0.3, release: 2 } : capOpts(kind);
+  const key = capJobKey(kind, opts);
+  let res = cap.cache && cap.cache.key === key ? cap.cache.res : null;
+  if (!res) {
+    setCapBusy(true, 'Rendering preview…');
+    try { res = await runCapture(kind, opts); } catch (err) { setCapBusy(false); $('capOut').textContent = `Preview failed: ${err.message}`; return; }
+    setCapBusy(false);
+    cap.cache = { key, res };
+  }
+  const chans = res.preview;
+  const ab = ctx.createBuffer(Math.max(2, chans.length), chans[0].length, res.sampleRate);
+  for (let c = 0; c < ab.numberOfChannels; c++) ab.copyToChannel(chans[Math.min(c, chans.length - 1)], c);
+  const src = ctx.createBufferSource();
+  src.buffer = ab;
+  src.loop = kind === 'loop';
+  src.connect(analyser);
+  src.onended = () => { if (cap.source === src) stopListening(); };
+  src.start();
+  cap.source = src;
+  $('capListen').textContent = kind === 'loop' ? '■ Stop loop' : '■ Stop';
+}
+
+function capFileName(kind, seconds, pitch) {
+  const base = (audio.name || 'audio').replace(/\.[^.]+$/, '').replace(/[^\w\- ]+/g, '').trim() || 'audio';
+  const note = pitch ? pitch.label.replace('−', '-') : 'no pitch';
+  const len = kind === 'drone' ? fmtTime(seconds).replace(/\s+/g, '') : `${+seconds.toFixed(2)}s`;
+  const type = kind === 'oneshot' ? 'one-shot' : kind;
+  return `${base} - ${note} - ${type} ${len}${cap.loop.mode === 'bars' && kind === 'loop' ? ` ${cap.loop.bpm}bpm` : ''}.wav`;
+}
+
+async function capExport() {
+  if (cap.pos === null) return;
+  await ensureAudio();
+  refreshSnapshot();
+  const kind = cap.type;
+  const opts = capOpts(kind);
+  if (kind === 'loop' && loopSeconds() > 60) { $('capOut').textContent = 'Loops can be at most 60 seconds. Use fewer bars or a faster tempo.'; return; }
+  const key = capJobKey(kind, opts);
+  let res = kind !== 'drone' && cap.cache && cap.cache.key === key ? cap.cache.res : null;
+  if (!res) {
+    setCapBusy(true, kind === 'drone' ? 'Starting…' : 'Rendering…');
+    try { res = await runCapture(kind, opts); } catch (err) { setCapBusy(false); $('capOut').textContent = `Export failed: ${err.message}`; return; }
+    setCapBusy(false);
+    if (kind !== 'drone') cap.cache = { key, res };
+  }
+  let file = res.blob;
+  if (res.fileKind === 'opfs') file = await (await (await navigator.storage.getDirectory()).getFileHandle(res.name)).getFile();
+  if (cap.url) URL.revokeObjectURL(cap.url);
+  cap.url = URL.createObjectURL(file);
+  const fname = capFileName(kind, kind === 'drone' ? res.bodySeconds : opts.seconds, res.pitch);
+  const out = $('capOut');
+  out.innerHTML = '';
+  const a = document.createElement('a');
+  a.href = cap.url; a.download = fname;
+  a.textContent = `Download ${fname} (${(file.size / 1048576).toFixed(1)} MB)`;
+  const info = document.createElement('span');
+  info.className = 'muted small';
+  const parts = [`${opts.bits}-bit`, res.pitch ? `root ${res.pitch.label}` : 'root C4 (no clear pitch)'];
+  if (kind === 'loop') parts.push('loop points set');
+  if (res.tailSeconds > 0.05) parts.push(`${res.tailSeconds.toFixed(1)} s tail`);
+  if (res.clipped) parts.push('some peaks clipped: lower the volume or turn on Normalise');
+  info.textContent = parts.join(' · ');
+  out.append(a, info);
+}
+
+$('captureBtn').addEventListener('click', captureMoment);
+$('capListen').addEventListener('click', capListen);
+$('capExport').addEventListener('click', capExport);
+$('capCancel').addEventListener('click', () => {
+  cap.jobId++;
+  cap.worker?.terminate();
+  cap.worker = null;
+  setCapBusy(false);
+  $('capOut').textContent = 'Cancelled.';
+  removeExportFiles();
+});
+document.querySelectorAll('input[name=capType]').forEach((r) => r.addEventListener('change', () => {
+  cap.type = r.value;
+  stopListening();
+  buildCaptureOptions();
+}));
+buildCaptureOptions();
+
 // ------------------------------------------------------------------ wiring
 
 $('file').addEventListener('change', async (e) => {
@@ -1126,6 +1464,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('resize', () => {
   drawWave();
   drawEqEditor();
+  drawCaptureSpectrum();
   document.querySelectorAll('.eq3-graph').forEach(drawEq3);
 });
 

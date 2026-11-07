@@ -14,6 +14,7 @@ class StretchPlayer extends AudioWorkletProcessor {
     this.workerPort = null;
     this.playing = false;
     this.fx = new FxChain(sampleRate, 128);
+    this.fx.units.binaural.gate.jump(0); // generated tones only while playing
     this.port.onmessage = (e) => {
       const m = e.data;
       if (m.type === 'port') {
@@ -24,8 +25,10 @@ class StretchPlayer extends AudioWorkletProcessor {
       } else if (m.type === 'play') {
         this.playing = true;
         this.fx.resetTimeline();   // binaural glide starts from the beginning
+        this.fx.setToneGate(1);
       } else if (m.type === 'stop') {
         this.playing = false;      // effects keep running so tails ring out
+        this.fx.setToneGate(0);    // but generated binaural tones stop with the music
       }
     };
   }
