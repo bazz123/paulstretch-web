@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PaulStretch Web</title>
+  <meta name="description" content="Extreme time stretching in the browser: a reimplementation of PaulXStretch with spectral modules, effects and long WAV exports.">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e14; --panel: #121722; --panel-2: #181f2d; --line: #243045;
+      --text: #dfe6f3; --muted: #8592a8; --accent: #6fd3c4; --accent-2: #8f9cff;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text); font-size: 15px; line-height: 1.55;
+      background: radial-gradient(1200px 600px at 20% -10%, #18233a 0%, transparent 60%), var(--bg);
+    }
+    main { max-width: 880px; margin: 0 auto; padding: 56px 24px 40px; }
+    h1 { margin: 0; font-size: 34px; letter-spacing: 0.01em; font-weight: 650; }
+    h1 span { color: var(--accent); font-weight: 400; }
+    .lead { color: #c3cbdb; max-width: 620px; margin: 10px 0 36px; font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .card.fx { border-color: #2c3753; }
+    .card h2 { margin: 0; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+    .tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--bg); background: var(--accent-2); border-radius: 4px; padding: 3px 6px; }
+    .card p { margin: 0; color: #c3cbdb; }
+    .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+    .card li { margin: 2px 0; }
+    .open {
+      margin-top: auto; align-self: flex-start; text-decoration: none; font-weight: 600;
+      background: var(--accent); color: #062421; padding: 10px 18px; border-radius: 8px;
+    }
+    .open:hover { filter: brightness(1.08); }
+    .card.fx .open { background: var(--accent-2); color: #0b0e14; }
+    .notes { margin-top: 32px; color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+    .notes a, footer a { color: var(--accent); }
+    footer { max-width: 880px; margin: 0 auto; padding: 0 24px 32px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 600px) { main { padding: 36px 16px 28px; } h1 { font-size: 28px; } footer { padding: 0 16px 24px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PaulStretch <span>Web</span></h1>
+    <p class="lead">Turn any sound into a slowly evolving ambient texture, right in your browser. A from-scratch reimplementation of PaulXStretch: nothing to install, and your audio never leaves your computer.</p>
+
+    <div class="cards">
+      <section class="card">
+        <h2>PaulStretch Web</h2>
+        <p>The core time-stretcher.</p>
+        <ul>
+          <li>Stretch from ×0.1 to ×10,000</li>
+          <li>8 spectral modules: harmonics, pitch shift, spread, filter and more</li>
+          <li>Presets, built-in help, WAV export up to 10 minutes</li>
+        </ul>
+        <a class="open" href="paulstretch-web/">Open the app</a>
+      </section>
+      <section class="card fx">
+        <h2>PaulStretch Web <span class="tag">FX</span></h2>
+        <p>Everything in the core app, plus effects for ambient and drone work.</p>
+        <ul>
+          <li>Reverb with shimmer, 3-voice chorus, 3-band EQ</li>
+          <li>Drawable spectral EQ curve</li>
+          <li>Binaural beats with glide (headphones)</li>
+          <li>Streamed WAV export up to 3 hours</li>
+        </ul>
+        <a class="open" href="paulstretch-web-fx/">Open the FX version</a>
+      </section>
+    </div>
+
+    <div class="notes">
+      <span>Works best in a recent Chrome, Edge, Firefox or Safari on a computer. Click <strong>Demo sound</strong> to try it without a file, and <strong>?</strong> for help.</span>
+      <span>Source code: <a href="https://github.com/bazz123/paulstretch-web">github.com/bazz123/paulstretch-web</a></span>
+    </div>
+  </main>
+  <footer>Algorithm by Nasca Octavian Paul (PaulStretch); spectral modules after PaulXStretch by Xenakios &amp; Jesse Chappell. GPLv3.</footer>
+</body>
+</html>

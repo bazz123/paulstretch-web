@@ -1,15 +1,17 @@
 # PaulStretch Web
 
+**▶ Try it online: https://bazz123.github.io/paulstretch-web/**
+
 A from-scratch browser reimplementation of [PaulXStretch](https://github.com/essej/paulxstretch):
 extreme time stretching based on the PaulStretch algorithm by Nasca Octavian Paul,
 with the PaulXStretch spectral modules. Plain HTML/JS, no build step, no dependencies.
 
 | Folder | What it is |
 |---|---|
-| [`paulstretch-web/`](paulstretch-web/) | The core app: stretch engine, 8 spectral modules, presets, help page, WAV export |
-| [`paulstretch-web-fx/`](paulstretch-web-fx/) | Extended version: binaural beats (with glide), 3-band EQ, chorus, reverb with shimmer, drawable spectral EQ curve, streamed WAV export up to 3 hours |
+| [`paulstretch-web/`](paulstretch-web/) ([open](https://bazz123.github.io/paulstretch-web/paulstretch-web/)) | The core app: stretch engine, 8 spectral modules, presets, help page, WAV export |
+| [`paulstretch-web-fx/`](paulstretch-web-fx/) ([open](https://bazz123.github.io/paulstretch-web/paulstretch-web-fx/)) | Extended version: binaural beats (with glide), 3-band EQ, chorus, reverb with shimmer, drawable spectral EQ curve, streamed WAV export up to 3 hours |
 
-## Run
+## Run locally
 
 Workers and AudioWorklets need HTTP, so serve a folder locally:
 
